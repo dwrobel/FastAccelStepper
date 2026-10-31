@@ -61,7 +61,7 @@ bool StepperQueue::claim_pio_resources(FastAccelStepperEngine* engine,
   pio_program.length = program->pc;
   pio_program.origin = 0;
   pio_program.pio_version = 0;
-#if defined(PICO_RP_2350)
+#if defined(PICO_RP2350)
   pio_program.used_gpio_ranges = 0;
 #endif
   uint offset;
@@ -198,7 +198,16 @@ int32_t StepperQueue::getCurrentStepCount() const {
     // of cycles. If the SM is instead stalled on a `pull` there is no
     // meaningful position to report, and the move's own target is the honest
     // fallback.
-    while (!pio_sm_is_rx_fifo_empty(pio, sm)) {
+    //
+    // Discard at most the FIFO depth (4) of samples, not until it is empty: on
+    // RP2040 a read takes about 9 cycles against a push every 3, and 4 reads
+    // exceed the 26 cycles between period loops, so draining until empty spun
+    // until the SM stalled on `pull`, i.e. for the whole move. By the 4th read
+    // the FIFO holds samples pushed during the reads.
+    for (uint8_t i = 0; i < 4; i++) {
+      if (pio_sm_is_rx_fifo_empty(pio, sm)) {
+        break;
+      }
       pio_sm_get(pio, sm);
     }
     for (uint16_t spin = 0; spin < 256; spin++) {

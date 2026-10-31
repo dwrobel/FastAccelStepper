@@ -118,17 +118,21 @@ void RampGenerator::afterCommandEnqueued(const NextCommand* command) {
 }
 void RampGenerator::getNextCommand(const struct queue_end_s* queue_end,
                                    NextCommand* command) {
-  // we are running in higher priority than the application
-  // so we can just read the config without disable interrupts
+  // we are running in higher priority than the application, but on a
+  // multicore system the application may run in parallel on another core,
+  // so copy and clear the parameters with interrupts disabled like the
+  // application sets them
   // copy consistent ramp state
   bool was_keep_running = _ro.config.parameters.keep_running;
   if (_parameters.apply) {
+    fasDisableInterrupts();
     _ro.config.parameters = _parameters;
     _parameters.apply = false;
     _parameters.any_change = false;
     _parameters.move_value = 0;
     _parameters.move_absolute = false;
     _parameters.recalc_ramp_steps = false;
+    fasEnableInterrupts();
     _ro.config.update();
     // if new move command,then reset any immediate stop flag
     if (_ro.isImmediateStopInitiated()) {
